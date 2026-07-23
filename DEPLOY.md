@@ -1,76 +1,79 @@
 # Deploy QuranApp to Render — 5 Minute Guide
 
-This guide gets your app live on [Render](https://render.com) using the included Dockerfile.
+This guide gets you from zero to a live, production-ready deployment on [Render](https://render.com).
 
 ## Prerequisites
 
-- A [Render](https://render.com) account (free to sign up)
-- A [MongoDB Atlas](https://www.mongodb.com/cloud/atlas/register) free cluster (Render has no managed MongoDB) — grab your connection string
-- This repo pushed to GitHub
+- A [Render account](https://dashboard.render.com/register) (free)
+- A [MongoDB Atlas](https://www.mongodb.com/cloud/atlas/register) free-tier cluster (or any MongoDB URI)
+- This repo pushed to GitHub/GitLab
 
-## Option A: One-Click via render.yaml (Recommended)
+## 1. Get your MongoDB connection string
 
-1. **Push this repo to GitHub** (if not already):
-   ```bash
-   git add .
-   git commit -m "Add deployment config"
-   git push origin main
+1. In MongoDB Atlas, create a free cluster (M0).
+2. Go to **Database Access** → create a user with a strong password.
+3. Go to **Network Access** → allow access from `0.0.0.0/0` (or Render's IPs).
+4. Click **Connect → Drivers**, copy the connection string. It looks like:
+   ```
+   mongodb+srv://<user>:<password>@cluster0.xxxxx.mongodb.net/quranapp?retryWrites=true&w=majority
    ```
 
-2. **Create a new Blueprint on Render:**
-   - Go to https://dashboard.render.com/select-repo?type=blueprint
-   - Select your repository — Render will detect `render.yaml` automatically
+## 2. Deploy to Render (Blueprint method — fastest)
 
-3. **Set the two required secret env vars** in the Render dashboard (Environment tab) before first deploy:
-   - `MONGO_URI` → your MongoDB Atlas connection string
-   - `CORS_ORIGIN` → your Render app URL, e.g. `https://quranapp.onrender.com`
+```bash
+# 1. Push your code (if not already)
+git add .
+git commit -m "Add Render deployment config"
+git push origin main
+```
 
-Render will build the Docker image and deploy automatically. Done!
+```bash
+# 2. Install Render CLI (optional, or just use the dashboard)
+brew install render   # macOS, or see https://render.com/docs/cli
+```
 
-## Option B: Manual Web Service Setup
+```bash
+# 3. Launch the blueprint (or do this via dashboard: New > Blueprint > select repo)
+render blueprint launch
+```
 
-1. **Log in to Render** → Click **New +** → **Web Service**
-2. **Connect your GitHub repo**
-3. Configure:
-   - **Runtime:** Docker
-   - **Dockerfile Path:** `./Dockerfile`
-   - **Health Check Path:** `/health`
-   - **Plan:** Starter (or Free)
-4. **Add environment variables:**
+### Or via Dashboard (no CLI needed)
+
+1. Go to [Render Dashboard](https://dashboard.render.com) → **New** → **Blueprint**.
+2. Connect your GitHub repo — Render auto-detects `render.yaml`.
+3. When prompted, set these environment variables:
    | Key | Value |
    |---|---|
-   | `NODE_ENV` | `production` |
-   | `PORT` | `10000` |
-   | `MONGO_URI` | your Atlas connection string |
-   | `CORS_ORIGIN` | your Render service URL |
-5. Click **Create Web Service**
+   | `MONGO_URI` | your Atlas connection string from step 1 |
+   | `CORS_ORIGIN` | `https://<your-service-name>.onrender.com` |
+4. Click **Apply** — Render builds the Dockerfile and deploys automatically.
 
-## Enable Auto-Deploy from GitHub Actions (Optional but Recommended)
+## 3. Verify deployment
 
-1. In Render, go to your service → **Settings** → **Deploy Hook** → copy the URL
-2. In GitHub, go to repo **Settings → Secrets and variables → Actions**
-3. Add a secret named `RENDER_DEPLOY_HOOK_URL` with the copied URL
-4. Every push to `main` will now build, test, then trigger a Render deploy automatically
+Once deployed, Render gives you a URL like `https://quranapp.onrender.com`.
 
-## Run Locally with Docker (Test Before Deploying)
+```bash
+curl https://quranapp.onrender.com/health
+```
+
+You should see a `200 OK` response. If it fails, check **Logs** in the Render dashboard.
+
+## 4. Enable auto-deploy from GitHub Actions (optional but recommended)
+
+1. In Render Dashboard → your service → **Settings** → copy the **Deploy Hook URL**.
+2. In your GitHub repo → **Settings → Secrets and variables → Actions**, add:
+   - `RENDER_DEPLOY_HOOK_URL` = the URL you copied.
+3. Now every push to `main` runs tests, builds the Docker image, and triggers a Render deploy via `.github/workflows/deploy.yml`.
+
+## Local testing before deploy
 
 ```bash
 docker compose up --build
+curl http://localhost:10000/health
 ```
 
-Then visit: http://localhost:10000/health — should return `200 OK`
+## Troubleshooting
 
-## Verify Production Deployment
-
-```bash
-curl https://<your-app-name>.onrender.com/health
-```
-
-You should see a `200` response confirming the server and DB connection are healthy.
-
----
-
-**Important:** Your `server/index.js` must expose a `GET /health` route returning HTTP 200 (e.g. `{ status: "ok" }`) for the health checks in Docker and Render to pass. Add this if it doesn't exist yet:
-
-```js
-app.get("/health", (req, res) => res.status(200).json({ status: "ok" }));
+- **Build fails on client**: ensure `client/package.json` has a `build` script outputting to `client/dist`.
+- **App can't connect to MongoDB**: double check `MONGO_URI` and that Atlas Network Access allows `0.0.0.0/0`.
+- **Health check failing**: confirm your Express server has a `GET /health` route returning `200`.

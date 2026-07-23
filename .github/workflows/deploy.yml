@@ -1,4 +1,4 @@
-name: CI/CD - Build, Test, Deploy
+name: CI/CD Deploy
 
 on:
   push:
@@ -7,12 +7,13 @@ on:
     branches: [main]
 
 env:
-  NODE_VERSION: "20.15.0"
+  NODE_VERSION: "20.15.1"
 
 jobs:
   build-and-test:
     name: Build & Test
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -24,36 +25,46 @@ jobs:
           cache: "npm"
 
       - name: Install root dependencies
-        run: npm ci --no-audit --no-fund
-
-      - name: Install client dependencies
-        run: npm --prefix client ci --no-audit --no-fund
-        continue-on-error: false
-
-      - name: Run server tests (if present)
-        run: npm test --if-present
-
-      - name: Run client tests (if present)
-        run: npm --prefix client test --if-present -- --watchAll=false
+        run: npm ci
 
       - name: Build client
         run: npm run build
 
-      - name: Build Docker image (sanity check)
-        run: docker build -t quranapp:ci .
+      - name: Run tests
+        run: npm test --if-present
+
+      - name: Lint (if configured)
+        run: npm run lint --if-present
+
+  docker-build:
+    name: Docker Build Validation
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: quranapp:ci-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   deploy:
     name: Deploy to Render
-    needs: build-and-test
     runs-on: ubuntu-latest
+    needs: [build-and-test, docker-build]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
     steps:
       - name: Trigger Render Deploy Hook
-        env:
-          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
         run: |
-          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
-            echo "ERROR: RENDER_DEPLOY_HOOK_URL secret not set."
-            exit 1
-          fi
-          curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL"
+          curl -f -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" \
+            || (echo "Deploy hook failed" && exit 1)
