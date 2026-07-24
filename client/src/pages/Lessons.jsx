@@ -1,6 +1,19 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 
+function getErrorMessage(err, fallback) {
+  if (!err) return fallback
+  const data = err.response && err.response.data
+  if (data) {
+    if (typeof data === 'string') return data
+    if (typeof data.error === 'string') return data.error
+    if (typeof data.message === 'string') return data.message
+    try { return JSON.stringify(data) } catch (e) { return fallback }
+  }
+  if (typeof err.message === 'string') return err.message
+  return fallback
+}
+
 export default function Lessons() {
   const [lessons, setLessons] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -21,10 +34,10 @@ export default function Lessons() {
           setLoading(false);
         }
       })
-      .catch(() => {
+      .catch((err) => {
         if (isMounted) {
           setError(
-            "Failed to load lessons. Please check your connection and try again."
+            getErrorMessage(err, "Failed to load lessons. Please check your connection and try again.")
           );
           setLoading(false);
         }

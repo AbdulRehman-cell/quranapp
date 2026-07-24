@@ -1,5 +1,17 @@
 import React, { useState } from "react";
-import axios from "axios";
+
+function getErrorMessage(err, fallback) {
+  if (!err) return fallback
+  const data = err.response && err.response.data
+  if (data) {
+    if (typeof data === 'string') return data
+    if (typeof data.error === 'string') return data.error
+    if (typeof data.message === 'string') return data.message
+    try { return JSON.stringify(data) } catch (e) { return fallback }
+  }
+  if (typeof err.message === 'string') return err.message
+  return fallback
+}
 
 export default function Contact() {
   const [formData, setFormData] = useState({ name: '', email: '', message: '' });
@@ -14,22 +26,24 @@ export default function Contact() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
     setError("");
     setSuccess("");
 
     if (!formData.name || !formData.email || !formData.message) {
       setError("Please fill in all fields.");
-      setLoading(false);
       return;
     }
 
+    setLoading(true);
     try {
-      await axios.post("/api/contacts", formData);
-      setSuccess("Your message has been sent successfully!");
+      const mailto = `mailto:support@quranapp.com?subject=${encodeURIComponent(
+        'Message from ' + formData.name
+      )}&body=${encodeURIComponent(formData.message + '\n\nFrom: ' + formData.email)}`;
+      window.location.href = mailto;
+      setSuccess("Your message has been prepared. Please send it from your email client.");
       setFormData({ name: '', email: '', message: '' });
-    } catch (error) {
-      setError("There was an error sending your message. Please try again later.");
+    } catch (err) {
+      setError(getErrorMessage(err, "There was an error sending your message. Please try again later."));
     } finally {
       setLoading(false);
     }
@@ -71,6 +85,7 @@ export default function Contact() {
             value={formData.message}
             onChange={handleChange}
             required
+            rows={5}
             className="card"
           ></textarea>
           <button type="submit" className="btn btn-primary" disabled={loading}>

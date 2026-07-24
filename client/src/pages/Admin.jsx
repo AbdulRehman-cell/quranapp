@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
 
 // ForgeAI admin panel — generic CRUD over every data model.
@@ -46,6 +46,19 @@ const MODELS = [
   }
 ]
 
+function getErrorMessage(err, fallback) {
+  if (!err) return fallback
+  const data = err.response && err.response.data
+  if (data) {
+    if (typeof data === 'string') return data
+    if (typeof data.error === 'string') return data.error
+    if (typeof data.message === 'string') return data.message
+    try { return JSON.stringify(data) } catch (e) { return fallback }
+  }
+  if (typeof err.message === 'string') return err.message
+  return fallback
+}
+
 function ModelManager({ model }) {
   const [rows, setRows] = useState([])
   const [form, setForm] = useState({})
@@ -53,19 +66,20 @@ function ModelManager({ model }) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true)
     try {
       const { data } = await axios.get(model.endpoint)
       setRows(Array.isArray(data) ? data : (data.items || data.data || []))
       setError('')
     } catch (e) {
-      setError('Failed to load ' + model.name + 's')
+      setError(getErrorMessage(e, 'Failed to load ' + model.name + 's'))
     } finally {
       setLoading(false)
     }
-  }
-  useEffect(() => { load() }, [])
+  }, [model.endpoint, model.name])
+
+  useEffect(() => { load() }, [load])
 
   const set = (name, isBool) => (e) =>
     setForm((f) => ({ ...f, [name]: isBool ? e.target.checked : e.target.value }))
@@ -82,7 +96,7 @@ function ModelManager({ model }) {
       reset()
       await load()
     } catch (err) {
-      setError((err.response && err.response.data && err.response.data.message) || 'Save failed')
+      setError(getErrorMessage(err, 'Save failed'))
     }
   }
 
@@ -91,7 +105,7 @@ function ModelManager({ model }) {
   const remove = async (id) => {
     if (!window.confirm('Delete this record?')) return
     try { await axios.delete(model.endpoint + '/' + id); await load() }
-    catch (err) { setError('Delete failed') }
+    catch (err) { setError(getErrorMessage(err, 'Delete failed')) }
   }
 
   return (
