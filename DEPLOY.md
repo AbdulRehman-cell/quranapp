@@ -1,79 +1,106 @@
 # Deploy QuranApp to Render — 5 Minute Guide
 
-This guide gets you from zero to a live, production-ready deployment on [Render](https://render.com).
+This guide gets your app live on [Render](https://render.com) using Docker, with MongoDB included.
 
 ## Prerequisites
 
-- A [Render account](https://dashboard.render.com/register) (free)
-- A [MongoDB Atlas](https://www.mongodb.com/cloud/atlas/register) free-tier cluster (or any MongoDB URI)
-- This repo pushed to GitHub/GitLab
+- A [GitHub](https://github.com) account with this repo pushed to it
+- A [Render](https://render.com) account (free to sign up)
+- Docker installed locally (optional, only for testing before deploy)
 
-## 1. Get your MongoDB connection string
+---
 
-1. In MongoDB Atlas, create a free cluster (M0).
-2. Go to **Database Access** → create a user with a strong password.
-3. Go to **Network Access** → allow access from `0.0.0.0/0` (or Render's IPs).
-4. Click **Connect → Drivers**, copy the connection string. It looks like:
+## Option A: One-Click Deploy via `render.yaml` (Recommended)
+
+Render can read the `render.yaml` in this repo and provision everything automatically.
+
+### Steps
+
+1. **Push your code to GitHub** (if not already):
+   ```bash
+   git add .
+   git commit -m "Add production deployment config"
+   git push origin main
    ```
-   mongodb+srv://<user>:<password>@cluster0.xxxxx.mongodb.net/quranapp?retryWrites=true&w=majority
-   ```
 
-## 2. Deploy to Render (Blueprint method — fastest)
+2. **Create a new Blueprint on Render:**
+   - Go to https://dashboard.render.com/blueprints
+   - Click **New Blueprint Instance**
+   - Connect your GitHub repo
+   - Render detects `render.yaml` automatically and provisions:
+     - The `quranapp` web service (Docker)
+     - The `quranapp-mongo` database
 
-```bash
-# 1. Push your code (if not already)
-git add .
-git commit -m "Add Render deployment config"
-git push origin main
+3. **Set required environment variables** in the Render dashboard for the `quranapp` service:
+   - `MONGO_URI` → copy the internal connection string from the `quranapp-mongo` database page
+   - `CORS_ORIGIN` → your Render service URL, e.g. `https://quranapp.onrender.com`
+
+4. **Click Apply** — Render builds the Docker image and deploys it. First deploy takes ~3-5 minutes.
+
+Your app will be live at:
+```
+https://quranapp.onrender.com
 ```
 
-```bash
-# 2. Install Render CLI (optional, or just use the dashboard)
-brew install render   # macOS, or see https://render.com/docs/cli
-```
+---
+
+## Option B: Manual Web Service Setup
+
+If you prefer not to use the Blueprint:
+
+1. Go to https://dashboard.render.com/create?type=web
+2. Connect your GitHub repository
+3. Configure:
+   - **Runtime**: Docker
+   - **Dockerfile Path**: `./Dockerfile`
+   - **Health Check Path**: `/healthz`
+   - **Plan**: Starter (or Free for testing)
+4. Add environment variables (from `.env.example`):
+   - `NODE_ENV=production`
+   - `PORT=10000`
+   - `MONGO_URI=<your MongoDB connection string>`
+   - `CORS_ORIGIN=<your deployed URL>`
+5. Click **Create Web Service**
+
+For the database, either:
+- Use **MongoDB Atlas** (free tier) → https://www.mongodb.com/cloud/atlas/register, then paste the connection string into `MONGO_URI`
+- Or add a Render-managed Mongo via the Blueprint method above
+
+---
+
+## Enable Auto-Deploy from GitHub Actions (Optional)
+
+1. In your Render service settings, go to **Settings → Deploy Hook** and copy the URL.
+2. In your GitHub repo, go to **Settings → Secrets and variables → Actions**.
+3. Add a new secret:
+   - Name: `RENDER_DEPLOY_HOOK_URL`
+   - Value: (paste the deploy hook URL)
+4. Every push to `main` will now build, test, and trigger a Render deploy automatically via `.github/workflows/deploy.yml`.
+
+---
+
+## Test Locally Before Deploying
 
 ```bash
-# 3. Launch the blueprint (or do this via dashboard: New > Blueprint > select repo)
-render blueprint launch
-```
-
-### Or via Dashboard (no CLI needed)
-
-1. Go to [Render Dashboard](https://dashboard.render.com) → **New** → **Blueprint**.
-2. Connect your GitHub repo — Render auto-detects `render.yaml`.
-3. When prompted, set these environment variables:
-   | Key | Value |
-   |---|---|
-   | `MONGO_URI` | your Atlas connection string from step 1 |
-   | `CORS_ORIGIN` | `https://<your-service-name>.onrender.com` |
-4. Click **Apply** — Render builds the Dockerfile and deploys automatically.
-
-## 3. Verify deployment
-
-Once deployed, Render gives you a URL like `https://quranapp.onrender.com`.
-
-```bash
-curl https://quranapp.onrender.com/health
-```
-
-You should see a `200 OK` response. If it fails, check **Logs** in the Render dashboard.
-
-## 4. Enable auto-deploy from GitHub Actions (optional but recommended)
-
-1. In Render Dashboard → your service → **Settings** → copy the **Deploy Hook URL**.
-2. In your GitHub repo → **Settings → Secrets and variables → Actions**, add:
-   - `RENDER_DEPLOY_HOOK_URL` = the URL you copied.
-3. Now every push to `main` runs tests, builds the Docker image, and triggers a Render deploy via `.github/workflows/deploy.yml`.
-
-## Local testing before deploy
-
-```bash
+# Build and run with Docker Compose (includes local MongoDB)
 docker compose up --build
-curl http://localhost:10000/health
+
+# App available at http://localhost:10000
+# Health check: http://localhost:10000/healthz
 ```
+
+To stop:
+```bash
+docker compose down
+```
+
+---
 
 ## Troubleshooting
 
-- **Build fails on client**: ensure `client/package.json` has a `build` script outputting to `client/dist`.
-- **App can't connect to MongoDB**: double check `MONGO_URI` and that Atlas Network Access allows `0.0.0.0/0`.
-- **Health check failing**: confirm your Express server has a `GET /health` route returning `200`.
+| Issue | Fix |
+|---|---|
+| Build fails on client | Ensure `client/package.json` has a `build` script outputting to `client/dist` |
+| Health check fails | Confirm your server exposes a `GET /healthz` route returning `200 OK` |
+| Mongo connection refused | Double-check `MONGO_URI` matches Render's internal DB URL exactly |
+| CORS errors in browser | Set `CORS_ORIGIN` to your exact deployed frontend URL (no trailing slash) |

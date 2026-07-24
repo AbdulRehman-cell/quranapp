@@ -1,6 +1,3 @@
-# Render Blueprint — https://render.com/docs/blueprint-spec
-# Deploy via Render Dashboard > New > Blueprint, or `render blueprint launch`
-
 services:
   - type: web
     name: quranapp
@@ -9,24 +6,21 @@ services:
     region: oregon
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    healthCheckPath: /health
-    autoDeploy: true
+    healthCheckPath: /healthz
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
-        value: "10000"
+        value: 10000
       - key: MONGO_URI
         sync: false
       - key: CORS_ORIGIN
         sync: false
+    autoDeploy: true
     numInstances: 1
 
 databases:
   - name: quranapp-mongo
     databaseName: quranapp
     plan: starter
-    # NOTE: Render's managed "databases" section is for Postgres.
-    # For MongoDB, use MongoDB Atlas (free tier) and set MONGO_URI
-    # as a secret env var above. This block is left for reference
-    # only — remove if not using Render Postgres.
+    region: oregon

@@ -14,12 +14,12 @@ services:
       NODE_ENV: production
       PORT: 10000
       MONGO_URI: mongodb://mongo:27017/quranapp
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:10000}
+      CORS_ORIGIN: http://localhost:10000
     depends_on:
       mongo:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:10000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:10000/healthz"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -35,9 +35,11 @@ services:
       MONGO_INITDB_DATABASE: quranapp
     volumes:
       - mongo-data:/data/db
+    ports:
+      - "27017:27017"
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 15s
+      interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
